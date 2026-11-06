@@ -1,0 +1,10 @@
+node_modules/
+.env
+praniq-data.json
+praniq-cache.json
+.praniq/
+keys.json
+secret
+*.log
+test-*.js
+mock-keys.js
