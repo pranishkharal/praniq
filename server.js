@@ -291,27 +291,58 @@ function mountSetup(app, { local }) {
     res.send(codes.has(c) && codes.get(c).exp > Date.now() ? page.form(c) : page.expired());
   });
 
-  app.post('/setup', express.urlencoded({ extended: false, limit: '20kb' }), async (req, res) => {
-    res.set('Cache-Control', 'no-store');
-    const c = String(req.body.c || ''), entry = codes.get(c);
-    if (!entry || entry.exp < Date.now()) return res.send(page.expired());
-    const v = await K.verify({ youtube: req.body.youtube, gemini: req.body.gemini });
-    if (!v.youtube.length) {
-      return res.send(page.form(c, `<div class="bad">No working YouTube key. ${v.problems.map(page.esc).join('<br>')}</div>`));
-    }
-    const seat = entry.seat;
-    const keys = {
-      youtube: v.youtube.join(','),
-      gemini: v.gemini.join(',') || (seat.keys && seat.keys.gemini) || ''
-    };
-    seat.keys = keys;
-    codes.delete(c);
-    if (local) K.saveLocal(keys);
-    if (seat.notify) seat.notify().catch(() => {});
-    const personal = local ? '' : seat.baseUrl() + '/mcp?u=' + K.seal(keys);
-    res.send(page.done({ yt: v.youtube.length, gm: K.split(keys.gemini).length, personal, problems: v.problems, local }));
+ 
+app.post('/setup', express.urlencoded({ extended: false, limit: '20kb' }), async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+
+  // Safely handle missing or invalid request bodies
+  const body = req.body && typeof req.body === 'object'
+    ? req.body
+    : {};
+
+  const c = String(body.c || '');
+  const entry = codes.get(c);
+
+  if (!c || !entry || entry.exp < Date.now()) {
+    return res.status(400).send(page.expired());
+  }
+
+  const v = await K.verify({
+    youtube: body.youtube,
+    gemini: body.gemini
   });
-}
+
+  if (!v.youtube.length) {
+    return res.send(page.form(
+      c,
+      `<div class="bad">No working YouTube key. ${v.problems.map(page.esc).join('<br>')}</div>`
+    ));
+  }
+
+  const seat = entry.seat;
+
+  const keys = {
+    youtube: v.youtube.join(','),
+    gemini: v.gemini.join(',') || (seat.keys && seat.keys.gemini) || ''
+  };
+
+  seat.keys = keys;
+  codes.delete(c);
+
+  if (local) K.saveLocal(keys);
+  if (seat.notify) seat.notify().catch(() => {});
+
+  const personal = local ? '' : seat.baseUrl() + '/mcp?u=' + K.seal(keys);
+
+  res.send(page.done({
+    yt: v.youtube.length,
+    gm: K.split(keys.gemini).length,
+    personal,
+    problems: v.problems,
+    local
+  }));
+});
+
 
 module.exports = { build, TOOLS, mountSetup, engineFor, codes };
 
